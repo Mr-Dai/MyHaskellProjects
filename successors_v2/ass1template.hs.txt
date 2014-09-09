@@ -1,0 +1,70 @@
+data Sex = Male | Female deriving (Eq, Show)
+instance Ord Sex where
+    compare Male Male = EQ
+    compare Male Female = LT
+    compare Female Male = GT
+    compare Female Female = EQ
+
+data Status = Alive | Dead | Abdicated deriving (Eq, Show)
+
+data Person = Person Sex Status String deriving (Eq, Show)
+instance Ord Person where
+    compare (Person sx1 _ _) (Person sx2 _ _) = compare sx1 sx2
+
+data Dynasty =
+    Descend Person [Dynasty] | Dull Person deriving (Eq, Show)
+instance Ord Dynasty where
+    compare (Descend p1 _) (Descend p2 _) = compare p1 p2
+    compare (Descend p1 _) (Dull p2 ) = compare p1 p2
+    compare (Dull p1 ) (Descend p2 _) = compare p1 p2
+    compare (Dull p1) (Dull p2 ) = compare p1 p2
+
+successors :: String -> Dynasty -> [String]
+successors name dynasty = aliveafter name (linefrom dynasty)
+-- define the catamorphism cataD on Dynasty
+-- then reimplement linefrom to use cataD instead of explicit
+-- recursion and the new version of reorder below
+
+linefrom :: Dynasty -> [Person]
+linefrom dy =
+    case reorder dy of
+        Descend (Person _ Abdicated _) ds -> []
+        Descend person ds -> [person] ++ (concat . map linefrom) ds
+        Dull (Person _ Abdicated _) -> []
+        Dull person -> [person]
+
+-- redefine reorder so that all sub-dynasties are sorted
+-- with Males before Females, using cataD
+reorder :: Dynasty -> Dynasty
+reorder (Descend person ds) = Descend person (sortds ds)
+reorder d@(Dull _) = d
+
+sortds :: [Dynasty] -> [Dynasty]
+-- reimplement sortds to use new insertd and flatten below
+sortds dys = foldr insertd [] dys
+-- define a type of binary trees for Dynasty
+-- data BTD = Dnode BTD Dynasty BTD | Dnull
+-- define the catamorphism cataBTD on the above type
+-- use cataBTD to define a function to ¡°flatten¡± btd :: BTD
+-- in an in-order traversal
+-- flatten :: BTD -> [Dynasty]
+-- redefine insertd so that ¡°flatten d¡± yields every top-level
+-- Dynasty in d headed by a Male before every top-level Dynasty
+-- in d headed by a Female, in particular so that
+-- ¡°flatten(insertd d btd)¡± yields d before every top-level Dynasty
+-- headed by a Person of the same Sex as d
+-- insertd :: Dynasty -> BTD -> BTD
+
+insertd :: Dynasty -> [Dynasty] -> [Dynasty]
+insertd dy [] = [dy]
+insertd dy (d:ds) = if dy > d then d:(insertd dy ds) else dy:d:ds
+
+aliveafter :: String -> [Person] -> [String]
+aliveafter name ps =
+    let fromnam = dropWhile (\(Person _ _ pname)-> name /= pname) ps
+    in if null fromnam then [] else alivein (tail fromnam)
+alivein :: [Person] -> [String]
+alivein ps =
+    map
+    (\(Person _ _ name) -> name)
+    (filter (\(Person _ st _) -> st == Alive) ps)
